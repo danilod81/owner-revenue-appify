@@ -1,4 +1,5 @@
-FROM apify/actor-node-playwright:24.0.1
+# all Playwright browsers (Chromium, Chrome, Firefox, WebKit)
+FROM apify/actor-node-playwright:latest
 COPY package.json ./
 RUN npm install --omit=dev
 COPY . ./
