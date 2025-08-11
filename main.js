@@ -206,10 +206,9 @@ await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => 
 await saveShot('sso-2-state-after-email', page);
 
 // 1) If Google sent a phone prompt / passkey, skip password and wait for redirect
-const mfaIndicator = page.locator(
-  'text=/Check your phone|Verify it\\'s you|A Google prompt was sent|Use your phone to sign in|Two-step verification|' +
-  'Se envió una notificación a tu teléfono|Verifica tu teléfono|Confirma que eres tú|Verificación en dos pasos/i'
-).first();
+const mfaRE = /Check your phone|Verify it's you|A Google prompt was sent|Use your phone to sign in|Two-step verification|Se envió una notificación a tu teléfono|Verifica tu teléfono|Confirma que eres tú|Verificación en dos pasos/i;
+const mfaIndicator = page.getByText(mfaRE);
+
 
 if (await mfaIndicator.count().catch(() => 0)) {
   await saveShot('sso-2a-phone-prompt', page);
@@ -220,8 +219,8 @@ if (await mfaIndicator.count().catch(() => 0)) {
   let passInput = page.locator('input[type="password"], input[name="Passwd"]').first();
   if (!(await passInput.count())) {
     // 3) If there is a "Try another way" or "Use your password" link, click it
-    const tryAnother = page.locator('text=/Try another way|Probar otra forma|Otra forma/i').first();
-    const usePassword = page.locator('text=/Use your password|Usar tu contraseña|Usa tu contraseña/i').first();
+    const tryAnother = page.getByText(/Try another way|Probar otra forma|Otra forma/i);
+const usePassword = page.getByText(/Use your password|Usar tu contraseña|Usa tu contraseña/i);
 
     if (await tryAnother.isVisible().catch(() => false)) {
       await saveShot('sso-2b-try-another-way', page);
