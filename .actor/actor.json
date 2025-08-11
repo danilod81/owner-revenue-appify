@@ -8,4 +8,4 @@
   "input": "./INPUT_SCHEMA.json",
     "required": ["loginUrl", "ownersUrl", "email", "password", "n8nWebhookUrl"]
   }
-}
+
