@@ -1,6 +1,14 @@
 import { Actor, log, KeyValueStore } from 'apify';
 import { chromium } from 'playwright';
 
+const kv = await KeyValueStore.open(); // default store
+
+async function saveShot(key, page) {
+  const buf = await page.screenshot({ fullPage: true });
+  await kv.setValue(key, buf, { contentType: 'image/png' });
+  log.info('Saved screenshot: %s', key);
+}
+
 log.setLevel(log.LEVELS.INFO); // set DEBUG if you want super-verbose logs
 
 function prevMonthKey(tz = 'America/Argentina/Buenos_Aires') {
@@ -149,6 +157,9 @@ async function doGoogleLogin() {
   log.info('Google SSO login at %s', loginUrl);
   await page.goto(loginUrl, { waitUntil: 'networkidle' });
 
+// after: await page.goto(loginUrl, { waitUntil: 'networkidle' });
+await saveShot('login-page', page);
+
   // Click "Continue with Google" button or link if present
   const googleBtn = page.getByRole('button', { name: /google|continuar con google|continue with google/i });
   if (await googleBtn.isVisible().catch(() => false)) {
@@ -160,6 +171,8 @@ async function doGoogleLogin() {
 
   // Google auth flow
   await page.waitForURL(/accounts\.google\.com/i, { timeout: 30000 });
+
+await saveShot('sso-1-google-email', page);
 
   // (optional) save a screenshot you can view after the run
   await page.screenshot({ path: 'apify_storage/key_value_stores/default/step-1-google.png', fullPage: true });
@@ -173,6 +186,10 @@ async function doGoogleLogin() {
   await page.locator('input[type="password"]').fill(password, { timeout: 30000 });
   await page.keyboard.press('Enter');
 
+// after filling password:
+await saveShot('sso-2-google-password', page);
+
+
   // give time for 2FA approval if enforced
   if (pauseFor2FASeconds > 0) {
     log.info('Waiting up to %ds for Google 2FA…', pauseFor2FASeconds);
@@ -184,8 +201,12 @@ async function doGoogleLogin() {
     }
   }
 
+await saveShot('sso-3-waiting-mfa', page);
+
+
   // back to Guesty
   await page.waitForURL(/app\.guesty\.com/i, { timeout: 90000 });
+await saveShot('sso-4-back-at-guesty', page);
   log.info('Google SSO completed.');
 }
 
