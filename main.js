@@ -114,7 +114,11 @@ const sel = {
 const sessionStore = await KeyValueStore.open('SESSION');
 const savedState = await sessionStore.getValue('storageState');
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: !useGoogleSSO,        // headful when doing SSO
+  args: ['--disable-dev-shm-usage']
+});
+
 const ctx = await browser.newContext(savedState ? { storageState: savedState } : undefined);
 const page = await ctx.newPage();
 
@@ -157,6 +161,9 @@ async function doGoogleLogin() {
   // Google auth flow
   await page.waitForURL(/accounts\.google\.com/i, { timeout: 30000 });
 
+  // (optional) save a screenshot you can view after the run
+  await page.screenshot({ path: 'apify_storage/key_value_stores/default/step-1-google.png', fullPage: true });
+
   // email
   await page.locator('input[type="email"]').fill(email, { timeout: 30000 });
   await page.keyboard.press('Enter');
@@ -168,8 +175,13 @@ async function doGoogleLogin() {
 
   // give time for 2FA approval if enforced
   if (pauseFor2FASeconds > 0) {
-    log.info('Waiting up to %ds for Google 2FA approval…', pauseFor2FASeconds);
-    await page.waitForNavigation({ timeout: pauseFor2FASeconds * 1000 }).catch(() => {});
+    log.info('Waiting up to %ds for Google 2FA…', pauseFor2FASeconds);
+    // keep the browser alive even if navigation doesn't happen yet
+    const end = Date.now() + pauseFor2FASeconds * 1000;
+    while (Date.now() < end) {
+      if (/app\.guesty\.com/i.test(page.url())) break;
+      await page.waitForTimeout(1000);
+    }
   }
 
   // back to Guesty
