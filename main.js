@@ -102,6 +102,9 @@ const results = []; // { owner, nickname, month, ownerRevenue }
 
 try {
   // 1) Login
+
+await page.goto(loginUrl, { waitUntil: 'networkidle' });
+
   const emailSel = 'input[type="email"], input[name="email"], input[name="username"]';
   const passSel = 'input[type="password"], input[name="password"]';
 
