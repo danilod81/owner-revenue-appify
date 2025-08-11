@@ -48,6 +48,18 @@
         "type": "object",
         "description": "Optional overrides for CSS/XPath selectors used in the UI navigation.",
         "editor": "json"
-      }
+      },
+    "useGoogleSSO": {
+      "title": "Use Google SSO",
+      "type": "boolean",
+      "description": "If true, click 'Continue with Google' and log in at accounts.google.com"
+    },
+    "pauseFor2FASeconds": {
+      "title": "2FA wait (seconds)",
+      "type": "integer",
+      "description": "How long to wait for you to approve a Google prompt / enter a code",
+      "default": 120
+    }
+
     }
 }
