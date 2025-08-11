@@ -1,11 +1,12 @@
-import { Actor } from 'apify';
+import { Actor, log, KeyValueStore } from 'apify';
 import { chromium } from 'playwright';
+
+log.setLevel(log.LEVELS.INFO); // set DEBUG if you want super-verbose logs
 
 function prevMonthKey(tz = 'America/Argentina/Buenos_Aires') {
   const now = new Date();
   const y = now.getUTCFullYear();
   const m = now.getUTCMonth(); // 0-11
-  // previous month relative to UTC; close enough, we also pass tz label downstream
   const prev = new Date(Date.UTC(y, m - 1, 1));
   const yy = prev.getUTCFullYear();
   const mm = String(prev.getUTCMonth() + 1).padStart(2, '0');
@@ -62,9 +63,17 @@ async function extractOwnerRevenueOnProperty(page, sel) {
   const label = page.locator(sel.ownerRevenueLabel).first();
   if (await label.count() === 0) return 0;
   const container = label.locator('xpath=..');
-  let textCandidate = await container.locator('xpath=.//*[contains(text(),"$") or contains(text(),"US$")]').first().innerText().catch(() => '');
+  let textCandidate = await container
+    .locator('xpath=.//*[contains(text(),"$") or contains(text(),"US$")]')
+    .first()
+    .innerText()
+    .catch(() => '');
   if (!textCandidate) {
-    textCandidate = await page.locator('text=/\d[\d\.,]*\s*(US\$|\$)/').first().innerText().catch(() => '');
+    textCandidate = await page
+      .locator('text=/\\d[\\d\\.,]*\\s*(US\\$|\\$)/')
+      .first()
+      .innerText()
+      .catch(() => '');
   }
   return parseMoneyToNumber(textCandidate);
 }
@@ -78,8 +87,16 @@ const {
   password,
   n8nWebhookUrl,
   timezone = 'America/Argentina/Buenos_Aires',
-  selectors = {}
-} = input;
+  selectors = {},
+  useGoogleSSO = false,
+  pauseFor2FASeconds = 120,
+} = input || {};
+
+if (!loginUrl || !ownersUrl || !email || !password || !n8nWebhookUrl) {
+  log.error('Missing required input(s). Provided flags — loginUrl:%s ownersUrl:%s email:%s n8n:%s',
+            !!loginUrl, !!ownersUrl, !!email, !!n8nWebhookUrl);
+  await Actor.exit(); process.exit(1);
+}
 
 const sel = {
   ownerRow: "xpath=//tr[.//button[contains(translate(., 'VISTA PREVIA', 'vista previa'),'vista previa')]]",
@@ -93,42 +110,98 @@ const sel = {
   ...selectors,
 };
 
-const targetMonth = prevMonthKey(timezone);
+// ---- session reuse via KV store ----
+const sessionStore = await KeyValueStore.open('SESSION');
+const savedState = await sessionStore.getValue('storageState');
+
 const browser = await chromium.launch({ headless: true });
-const ctx = await browser.newContext();
+const ctx = await browser.newContext(savedState ? { storageState: savedState } : undefined);
 const page = await ctx.newPage();
 
 const results = []; // { owner, nickname, month, ownerRevenue }
+const targetMonth = prevMonthKey(timezone);
+log.info('Starting. Target month: %s', targetMonth);
 
-try {
-  // 1) Login
-
-await page.goto(loginUrl, { waitUntil: 'networkidle' });
-
+async function doPasswordLogin() {
+  log.info('Password login at %s', loginUrl);
+  await page.goto(loginUrl, { waitUntil: 'networkidle' });
   const emailSel = 'input[type="email"], input[name="email"], input[name="username"]';
-  const passSel = 'input[type="password"], input[name="password"]';
-
-if (await page.locator(emailSel).count() > 0) {
-  await page.fill(emailSel, email, { timeout: 30000 });
-}
-if (await page.locator(passSel).count() > 0) {
-  await page.fill(passSel, password, { timeout: 30000 });
-}
-
-
-  // click submit
+  const passSel  = 'input[type="password"], input[name="password"]';
+  if (await page.locator(emailSel).count() > 0) {
+    await page.fill(emailSel, email, { timeout: 30000 });
+  }
+  if (await page.locator(passSel).count() > 0) {
+    await page.fill(passSel, password, { timeout: 30000 });
+  }
   const submitBtn = 'button:has-text("Ingresar"), button:has-text("Login"), button[type="submit"]';
   await Promise.all([
     page.locator(submitBtn).first().click({ timeout: 30000 }).catch(() => {}),
-    page.waitForLoadState('networkidle').catch(() => {})
+    page.waitForLoadState('networkidle').catch(() => {}),
   ]);
-  // some tenants redirect w/o explicit click if already logged in
   await page.waitForTimeout(1500);
+}
 
-  // 2) Go to owners list
+async function doGoogleLogin() {
+  log.info('Google SSO login at %s', loginUrl);
+  await page.goto(loginUrl, { waitUntil: 'networkidle' });
+
+  // Click "Continue with Google" button or link if present
+  const googleBtn = page.getByRole('button', { name: /google|continuar con google|continue with google/i });
+  if (await googleBtn.isVisible().catch(() => false)) {
+    await googleBtn.click().catch(() => {});
+  } else {
+    // fallback: link
+    await page.locator('text=/google/i').first().click({ timeout: 15000 }).catch(() => {});
+  }
+
+  // Google auth flow
+  await page.waitForURL(/accounts\.google\.com/i, { timeout: 30000 });
+
+  // email
+  await page.locator('input[type="email"]').fill(email, { timeout: 30000 });
+  await page.keyboard.press('Enter');
+
+  // password
+  await page.waitForSelector('input[type="password"]', { timeout: 30000 });
+  await page.locator('input[type="password"]').fill(password, { timeout: 30000 });
+  await page.keyboard.press('Enter');
+
+  // give time for 2FA approval if enforced
+  if (pauseFor2FASeconds > 0) {
+    log.info('Waiting up to %ds for Google 2FA approval…', pauseFor2FASeconds);
+    await page.waitForNavigation({ timeout: pauseFor2FASeconds * 1000 }).catch(() => {});
+  }
+
+  // back to Guesty
+  await page.waitForURL(/app\.guesty\.com/i, { timeout: 90000 });
+  log.info('Google SSO completed.');
+}
+
+try {
+  if (!savedState) {
+    if (useGoogleSSO) await doGoogleLogin();
+    else await doPasswordLogin();
+
+    // save session for future runs
+    const state = await ctx.storageState();
+    await sessionStore.setValue('storageState', state);
+    log.info('Saved session state for reuse.');
+  } else {
+    log.info('Loaded saved session state.');
+  }
+
+  // Go to owners list
+  log.info('Goto owners: %s', ownersUrl);
   await page.goto(ownersUrl, { waitUntil: 'networkidle' });
 
-  // Scroll to load all owners (handles infinite list)
+  // simple guard: if we got bounced to login again, ask to re-login next run
+  const url = page.url();
+  if (/accounts\.google\.com|login/i.test(url)) {
+    log.warning('Session expired (redirected to login). Re-run with useGoogleSSO=true to refresh.');
+    await Actor.exit(); process.exit(1);
+  }
+
+  // Scroll to load all owners (infinite lists)
   let prevHeight = 0;
   for (let s = 0; s < 20; s++) {
     await page.mouse.wheel(0, 2000);
@@ -140,50 +213,52 @@ if (await page.locator(passSel).count() > 0) {
 
   const ownerRows = page.locator(sel.ownerRow);
   const ownerCount = await ownerRows.count();
+  log.info('Found %d owners.', ownerCount);
 
   for (let i = 0; i < ownerCount; i++) {
     const row = ownerRows.nth(i);
     let ownerName = await row.locator(sel.ownerNameCell).first().innerText().catch(() => '');
     ownerName = (ownerName || '').trim();
 
-    // clicking "vista previa" should open a popup
-    const [preview] = await Promise.all([
-      page.waitForEvent('popup'),
-      row.locator(sel.ownerPreviewBtn).first().click({ timeout: 15000 })
-    ]);
+    // Some tenants open preview in a popup, others in same tab.
+    // Try popup first, fallback to same-tab.
+    let preview;
+    const click = row.locator(sel.ownerPreviewBtn).first();
+    const popupPromise = page.waitForEvent('popup', { timeout: 6000 }).catch(() => null);
+    await click.click({ timeout: 15000 }).catch(() => {});
+    const maybePopup = await popupPromise;
+    preview = maybePopup || page;
     await preview.waitForLoadState('domcontentloaded');
 
-    // Make sure we are on "Mis propiedades" tab
+    // Make sure we are on "Mis propiedades"
     await preview.getByRole('link', { name: /mis propiedades/i }).click({ timeout: 5000 }).catch(() => {});
 
-    // Ensure target month (previous month)
+    // Ensure previous month
     await ensureMonth(preview, targetMonth, sel).catch(() => {});
 
     // Iterate properties
     const props = preview.locator(sel.propertyRow);
     const pCount = await props.count();
+    log.info('Owner "%s": %d properties.', ownerName, pCount);
+
     for (let p = 0; p < pCount; p++) {
       const propRow = props.nth(p);
       await propRow.click().catch(() => {});
 
-      // nickname
       let nickname = await propRow.locator(sel.propertyNickname).first().innerText().catch(() => '');
-      if (!nickname) {
-        nickname = (await propRow.innerText().catch(() => '')).split('\n')[0].trim();
-      }
+      if (!nickname) nickname = (await propRow.innerText().catch(() => '')).split('\n')[0].trim();
 
-      // re-ensure month (some UIs reset on click)
       await ensureMonth(preview, targetMonth, sel).catch(() => {});
-
       const ownerRevenue = await extractOwnerRevenueOnProperty(preview, sel);
 
       results.push({ owner: ownerName, nickname, month: targetMonth, ownerRevenue });
     }
 
-    await preview.close().catch(() => {});
+    if (maybePopup) await preview.close().catch(() => {});
   }
 
-  // 3) Send to n8n
+  // Send to n8n
+  log.info('Posting %d items to n8n…', results.length);
   await page.request.post(n8nWebhookUrl, {
     data: { items: results },
     headers: { 'content-type': 'application/json' },
