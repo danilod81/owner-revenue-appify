@@ -5,19 +5,7 @@
   "buildTag": "latest",
   "dockerfile": "./Dockerfile",
   "readme": "./README.md",
-  "input": {
-    "schemaVersion": 1,
-    "title": "Config",
-    "type": "object",
-    "properties": {
-      "loginUrl": { "type": "string", "description": "https://app.guesty.com/login" },
-      "ownersUrl": { "type": "string", "description": "https://app.guesty.com/contact/owners" },
-      "email": { "type": "string" },
-      "password": { "type": "string" },
-      "n8nWebhookUrl": { "type": "string" },
-      "timezone": { "type": "string", "default": "America/Argentina/Buenos_Aires" },
-      "selectors": { "type": "object", "description": "Override CSS/XPath selectors if needed" }
-    },
+  "input": "./INPUT_SCHEMA.json",
     "required": ["loginUrl", "ownersUrl", "email", "password", "n8nWebhookUrl"]
   }
 }
