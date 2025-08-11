@@ -182,23 +182,27 @@ async function doGoogleLogin() {
   if (await accountChoice.isVisible().catch(() => false)) {
     await accountChoice.click().catch(() => {});
   } else {
-    // Fill EMAIL
-    const emailInput =
-      page.locator('input[type="email"], input[name="identifier"], #identifierId')
-          .first();
-    await emailInput.waitFor({ state: 'visible', timeout: 45000 });
-    await emailInput.fill(email);
-    // Click NEXT (handles EN/ES variants)
-    await page.locator('#identifierNext, button:has-text("Next"), button:has-text("Siguiente"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")')
-      .first().click({ timeout: 20000 });
-  }
 
-  // PASSWORD
-  await page.waitForSelector('input[type="password"], input[name="Passwd"]', { timeout: 45000 });
+
+    // --- EMAIL ---
+  log.info('Typing Google email…');
+  const emailInput = page.locator('input[type="email"], input[name="identifier"], #identifierId').first();
+  await emailInput.waitFor({ state: 'visible', timeout: 60000 });
+  await emailInput.click();
+  await emailInput.fill(email);
+  await saveShot('sso-1b-email-filled', page);
+
+  // Next (Enter is the most reliable)
+  await page.keyboard.press('Enter');
+
+  // --- PASSWORD ---
+  log.info('Waiting for password field…');
+  const passInput = page.locator('input[type="password"], input[name="Passwd"]').first();
+  await passInput.waitFor({ state: 'visible', timeout: 60000 });
   await saveShot('sso-2-google-password', page);
-  await page.locator('input[type="password"], input[name="Passwd"]').fill(password);
-  await page.locator('#passwordNext, button:has-text("Next"), button:has-text("Siguiente"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")')
-    .first().click({ timeout: 20000 });
+  await passInput.click();
+  await passInput.fill(password);
+  await page.keyboard.press('Enter');
 
   // MFA wait loop
   if (pauseFor2FASeconds > 0) {
