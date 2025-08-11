@@ -127,6 +127,7 @@ const sessionStore = await KeyValueStore.open('SESSION');
 const savedState = await sessionStore.getValue('storageState');
 
 const browser = await chromium.launch({
+ channel: 'chrome',      
   headless: !useGoogleSSO,        // headful when doing SSO
   args: ['--disable-dev-shm-usage']
 });
@@ -170,42 +171,46 @@ async function doGoogleLogin() {
     await page.locator('text=/google/i').first().click({ timeout: 15000 }).catch(() => {});
   }
 
-  // Wait for Google and handle consent if it appears
+  // Wait for Google auth and accept cookies/consent if shown
   await page.waitForURL(/accounts\.google\.com/i, { timeout: 45000 });
-  const consent = page.getByRole('button', { name: /accept all|i agree|accepto/i });
+  const consent = page.getByRole('button', { name: /accept all|i agree|accepto|de acuerdo/i });
   if (await consent.isVisible().catch(() => false)) await consent.click().catch(() => {});
   await saveShot('sso-1-google-email', page);
 
-  // CHOOSE ACCOUNT screen (if Google shows your email as an option)
-  const chooseAccount = page.locator('[data-identifier], div[role="link"] :text("' + email + '")');
-  if (await chooseAccount.count().catch(() => 0)) {
-    await chooseAccount.first().click().catch(() => {});
+  // If "Choose an account" is shown
+  const accountChoice = page.getByRole('link', { name: new RegExp(email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+  if (await accountChoice.isVisible().catch(() => false)) {
+    await accountChoice.click().catch(() => {});
   } else {
-    // EMAIL entry
-    const emailInput = page.locator('input[type="email"], input[name="identifier"], #identifierId');
+    // Fill EMAIL
+    const emailInput =
+      page.locator('input[type="email"], input[name="identifier"], #identifierId')
+          .first();
     await emailInput.waitFor({ state: 'visible', timeout: 45000 });
     await emailInput.fill(email);
-    await page.locator('#identifierNext, button:has-text("Next"), div[role="button"]:has-text("Next")').first().click();
+    // Click NEXT (handles EN/ES variants)
+    await page.locator('#identifierNext, button:has-text("Next"), button:has-text("Siguiente"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")')
+      .first().click({ timeout: 20000 });
   }
 
-  // PASSWORD entry
+  // PASSWORD
   await page.waitForSelector('input[type="password"], input[name="Passwd"]', { timeout: 45000 });
   await saveShot('sso-2-google-password', page);
   await page.locator('input[type="password"], input[name="Passwd"]').fill(password);
-  await page.locator('#passwordNext, button:has-text("Next"), div[role="button"]:has-text("Next")').first().click();
+  await page.locator('#passwordNext, button:has-text("Next"), button:has-text("Siguiente"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")')
+    .first().click({ timeout: 20000 });
 
-  // 2FA window — keep the browser alive while you approve
+  // MFA wait loop
   if (pauseFor2FASeconds > 0) {
     log.info('Waiting up to %ds for Google 2FA…', pauseFor2FASeconds);
     const end = Date.now() + pauseFor2FASeconds * 1000;
-    while (Date.now() < end) {
-      if (/app\.guesty\.com/i.test(page.url())) break;
+    while (Date.now() < end && !/app\.guesty\.com/i.test(page.url())) {
       await saveShot('sso-3-waiting-mfa', page);
       await page.waitForTimeout(1000);
     }
   }
 
-  // Back to Guesty app
+  // Back to Guesty
   await page.waitForURL(/app\.guesty\.com/i, { timeout: 120000 });
   await saveShot('sso-4-back-at-guesty', page);
   log.info('Google SSO completed.');
