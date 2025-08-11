@@ -48,7 +48,7 @@ function parseMoneyToNumber(text) {
   if (!text) return 0;
   const cleaned = text.replace(/\s/g,'');
   const core = cleaned.replace(/[^0-9,\.\-]/g,'');
-  if (core.count === 0) return 0;
+  if (core.length === 0) return 0;
   if (core.includes(',') && core.includes('.')) {
     return Number(core.replace(/\./g,'').replace(',','.')) || 0;
   }
@@ -102,14 +102,17 @@ const results = []; // { owner, nickname, month, ownerRevenue }
 
 try {
   // 1) Login
-  await page.goto(loginUrl, { waitUntil: 'networkidle' });
-  // try a few selectors for email/password
   const emailSel = 'input[type="email"], input[name="email"], input[name="username"]';
   const passSel = 'input[type="password"], input[name="password"]';
-  if (await page.locator(emailSel).count() > 0):
-    await page.fill(emailSel, email, { timeout: 30000 });
-  if (await page.locator(passSel).count() > 0):
-    await page.fill(passSel, password, { timeout: 30000 });
+
+if (await page.locator(emailSel).count() > 0) {
+  await page.fill(emailSel, email, { timeout: 30000 });
+}
+if (await page.locator(passSel).count() > 0) {
+  await page.fill(passSel, password, { timeout: 30000 });
+}
+
+
   // click submit
   const submitBtn = 'button:has-text("Ingresar"), button:has-text("Login"), button[type="submit"]';
   await Promise.all([
