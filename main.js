@@ -196,13 +196,30 @@ async function doGoogleLogin() {
     await page.keyboard.press('Enter');
   
     // --- PASSWORD ---
-    log.info('Waiting for password field…');
-    const passInput = page.locator('input[type="password"], input[name="Passwd"]').first();
-    await passInput.waitFor({ state: 'visible', timeout: 60000 });
-    await saveShot('sso-2-google-password', page);
-    await passInput.click();
-    await passInput.fill(password);
-    await page.keyboard.press('Enter');
+log.info('Waiting for password field…');
+// Try on the main page first…
+let passInput = page.locator('input[type="password"], input[name="Passwd"]').first();
+try {
+  await passInput.waitFor({ state: 'visible', timeout: 120000 });
+} catch {
+  // …fallback: look inside iframes (rare but happens)
+  for (const frame of page.frames()) {
+    const p = frame.locator('input[type="password"], input[name="Passwd"]').first();
+    if (await p.count().catch(() => 0)) { passInput = p; break; }
+  }
+  await passInput.waitFor({ state: 'visible', timeout: 60000 });
+}
+await saveShot('sso-2-google-password', page);
+await passInput.click();
+await passInput.fill(password);
+// Click Next explicitly (Enter sometimes gets ignored)
+await page.locator('#passwordNext, button:has-text("Next"), button:has-text("Siguiente"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")')
+  .first()
+  .click({ timeout: 30000 })
+  .catch(async () => { await page.keyboard.press('Enter'); });
+
+
+
 
   }
 
