@@ -52,7 +52,7 @@
         "useGoogleSSO": {
       "title": "Use Google SSO",
       "type": "boolean",
-      "useGoogleSSO": true,
+      "default": true,
         "description": "If true, click 'Continue with Google' and log in at accounts.google.com"
     },
     "pauseFor2FASeconds": {
