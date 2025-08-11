@@ -184,16 +184,27 @@ async function doGoogleLogin() {
   } else {
 
 
-      // --- EMAIL ---
+    // --- EMAIL ---
     log.info('Typing Google email…');
     const emailInput = page.locator('input[type="email"], input[name="identifier"], #identifierId').first();
     await emailInput.waitFor({ state: 'visible', timeout: 60000 });
     await emailInput.click();
     await emailInput.fill(email);
     await saveShot('sso-1b-email-filled', page);
-  
-    // Next (Enter is the most reliable)
-    await page.keyboard.press('Enter');
+    
+    // Click NEXT explicitly (and fall back to Enter)
+    const next = page.locator(
+      '#identifierNext, button:has-text("Next"), button:has-text("Siguiente"), ' +
+      'div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")'
+    ).first();
+    await next.click({ timeout: 20000 }).catch(async () => {
+      await page.keyboard.press('Enter');
+    });
+    
+    // small wait so Google renders the password step
+    await page.waitForTimeout(500);
+    
+
   
     // --- PASSWORD ---
 log.info('Waiting for password field…');
