@@ -171,19 +171,17 @@ async function doGoogleLogin() {
     await page.locator('text=/google/i').first().click({ timeout: 15000 }).catch(() => {});
   }
 
-  // Wait for Google auth and accept cookies/consent if shown
+  // Google
   await page.waitForURL(/accounts\.google\.com/i, { timeout: 45000 });
   const consent = page.getByRole('button', { name: /accept all|i agree|accepto|de acuerdo/i });
   if (await consent.isVisible().catch(() => false)) await consent.click().catch(() => {});
   await saveShot('sso-1-google-email', page);
 
-  // If "Choose an account" is shown
+  // If "Choose an account" is shown, click your email. Otherwise type it.
   const accountChoice = page.getByRole('link', { name: new RegExp(email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
   if (await accountChoice.isVisible().catch(() => false)) {
     await accountChoice.click().catch(() => {});
   } else {
-
-
     // --- EMAIL ---
     log.info('Typing Google email…');
     const emailInput = page.locator('input[type="email"], input[name="identifier"], #identifierId').first();
@@ -191,64 +189,56 @@ async function doGoogleLogin() {
     await emailInput.click();
     await emailInput.fill(email);
     await saveShot('sso-1b-email-filled', page);
-    
-    // Click NEXT explicitly (and fall back to Enter)
+
+    // Click NEXT explicitly (fallback to Enter)
     const next = page.locator(
       '#identifierNext, button:has-text("Next"), button:has-text("Siguiente"), ' +
       'div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")'
     ).first();
-    await next.click({ timeout: 20000 }).catch(async () => {
-      await page.keyboard.press('Enter');
-    });
-    
-   // After clicking NEXT on the email step:
-await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
-await saveShot('sso-2-state-after-email', page);
+    await next.click({ timeout: 20000 }).catch(async () => { await page.keyboard.press('Enter'); });
+  } // <-- CLOSE the email-typing ELSE here
 
-// 1) If Google sent a phone prompt / passkey, skip password and wait for redirect
-const mfaRE = /Check your phone|Verify it's you|A Google prompt was sent|Use your phone to sign in|Two-step verification|Se envió una notificación a tu teléfono|Verifica tu teléfono|Confirma que eres tú|Verificación en dos pasos/i;
-const mfaIndicator = page.getByText(mfaRE);
+  // ---- Common path after email/choice ----
+  await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+  await saveShot('sso-2-state-after-email', page);
 
+  // If Google sent a phone prompt / passkey, skip password & wait
+  const mfaRE = /Check your phone|Verify it's you|A Google prompt was sent|Use your phone to sign in|Two-step verification|Se envió una notificación a tu teléfono|Verifica tu teléfono|Confirma que eres tú|Verificación en dos pasos/i;
+  const mfaIndicator = page.getByText(mfaRE);
 
-if (await mfaIndicator.count().catch(() => 0)) {
-  await saveShot('sso-2a-phone-prompt', page);
-  log.info('Detected Google phone/prompt MFA. Waiting for approval…');
-  // jump to the MFA loop (same one you already have)
-} else {
-  // 2) Try to find the password field normally
-  let passInput = page.locator('input[type="password"], input[name="Passwd"]').first();
-  if (!(await passInput.count())) {
-    // 3) If there is a "Try another way" or "Use your password" link, click it
-    const tryAnother = page.getByText(/Try another way|Probar otra forma|Otra forma/i);
-const usePassword = page.getByText(/Use your password|Usar tu contraseña|Usa tu contraseña/i);
-
-    if (await tryAnother.isVisible().catch(() => false)) {
-      await saveShot('sso-2b-try-another-way', page);
-      await tryAnother.click().catch(() => {});
-    }
-    if (await usePassword.isVisible().catch(() => false)) {
-      await saveShot('sso-2c-use-password', page);
-      await usePassword.click().catch(() => {});
-    }
-
-    // re-locate password input after toggling
-    passInput = page.locator('input[type="password"], input[name="Passwd"]').first();
-  }
-
-  // 4) Fill password if present; otherwise we’ll drop to the MFA loop below
-  if (await passInput.count()) {
-    await passInput.waitFor({ state: 'visible', timeout: 60000 }).catch(() => {});
-    await saveShot('sso-2-google-password', page);
-    await passInput.click();
-    await passInput.fill(password);
-    await page.locator('#passwordNext, button:has-text("Next"), button:has-text("Siguiente"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")')
-      .first().click({ timeout: 30000 }).catch(async () => { await page.keyboard.press('Enter'); });
+  if (await mfaIndicator.count().catch(() => 0)) {
+    await saveShot('sso-2a-phone-prompt', page);
+    log.info('Detected Google phone/prompt MFA. Waiting for approval…');
   } else {
-    log.info('Password field not shown; proceeding with MFA wait (phone/prompt assumed).');
-  }
-}
+    // Try to find the password field (and force it if hidden)
+    let passInput = page.locator('input[type="password"], input[name="Passwd"]').first();
+    if (!(await passInput.count())) {
+      const tryAnother = page.getByText(/Try another way|Probar otra forma|Otra forma/i);
+      const usePassword = page.getByText(/Use your password|Usar tu contraseña|Usa tu contraseña/i);
+      if (await tryAnother.isVisible().catch(() => false)) {
+        await saveShot('sso-2b-try-another-way', page);
+        await tryAnother.click().catch(() => {});
+      }
+      if (await usePassword.isVisible().catch(() => false)) {
+        await saveShot('sso-2c-use-password', page);
+        await usePassword.click().catch(() => {});
+      }
+      passInput = page.locator('input[type="password"], input[name="Passwd"]').first();
+    }
 
-  // MFA wait loop
+    if (await passInput.count()) {
+      await passInput.waitFor({ state: 'visible', timeout: 60000 }).catch(() => {});
+      await saveShot('sso-2-google-password', page);
+      await passInput.click();
+      await passInput.fill(password);
+      await page.locator('#passwordNext, button:has-text("Next"), button:has-text("Siguiente"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Siguiente")')
+        .first().click({ timeout: 30000 }).catch(async () => { await page.keyboard.press('Enter'); });
+    } else {
+      log.info('Password field not shown; proceeding with MFA wait (phone/prompt assumed).');
+    }
+  }
+
+  // MFA wait loop (applies to both paths)
   if (pauseFor2FASeconds > 0) {
     log.info('Waiting up to %ds for Google 2FA…', pauseFor2FASeconds);
     const end = Date.now() + pauseFor2FASeconds * 1000;
