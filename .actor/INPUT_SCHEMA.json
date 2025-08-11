@@ -1,0 +1,53 @@
+{
+    "schemaVersion": 1,
+    "title": "Config",
+    "type": "object",
+    "properties": {
+      "loginUrl": {
+        "title": "Guesty login URL",
+        "type": "string",
+        "description": "Full URL of the Guesty login page, e.g., https://app.guesty.com/login",
+        "editor": "textfield"
+      },
+      "ownersUrl": {
+        "title": "Owners list URL",
+        "type": "string",
+        "description": "Page that lists owners with the “vista previa” buttons, e.g., https://app.guesty.com/contact/owners",
+        "editor": "textfield"
+      },
+      "email": {
+        "title": "Email",
+        "type": "string",
+        "description": "Login email for Guesty (use a dedicated automation user if possible)",
+        "editor": "textfield"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "description": "Login password for Guesty (stored encrypted on Apify)",
+        "editor": "textfield",
+        "isSecret": true
+      },
+      "n8nWebhookUrl": {
+        "title": "n8n Webhook URL",
+        "type": "string",
+        "description": "Your n8n Cloud webhook (POST) that will receive { items: [...] }",
+        "editor": "textfield"
+      },
+      "timezone": {
+        "title": "Timezone",
+        "type": "string",
+        "description": "IANA timezone used to compute the previous month (default America/Argentina/Buenos_Aires)",
+        "default": "America/Argentina/Buenos_Aires",
+        "editor": "select",
+        "enum": ["America/Argentina/Buenos_Aires", "UTC"],
+        "enumTitles": ["America/Argentina/Buenos_Aires", "UTC"]
+      },
+      "selectors": {
+        "title": "Selectors (advanced)",
+        "type": "object",
+        "description": "Optional overrides for CSS/XPath selectors used in the UI navigation.",
+        "editor": "json"
+      }
+    }
+}
