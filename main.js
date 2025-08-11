@@ -1,6 +1,10 @@
 import { Actor, log, KeyValueStore } from 'apify';
 import { chromium } from 'playwright';
 
+// ✅ init FIRST
+await Actor.init();
+
+// ✅ now open storages
 const kv = await KeyValueStore.open(); // default store
 
 async function saveShot(key, page) {
@@ -86,7 +90,7 @@ async function extractOwnerRevenueOnProperty(page, sel) {
   return parseMoneyToNumber(textCandidate);
 }
 
-await Actor.init();
+
 const input = await Actor.getInput();
 const {
   loginUrl,
@@ -174,8 +178,6 @@ await saveShot('login-page', page);
 
 await saveShot('sso-1-google-email', page);
 
-  // (optional) save a screenshot you can view after the run
-  await page.screenshot({ path: 'apify_storage/key_value_stores/default/step-1-google.png', fullPage: true });
 
   // email
   await page.locator('input[type="email"]').fill(email, { timeout: 30000 });
