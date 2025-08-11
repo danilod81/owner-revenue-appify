@@ -49,10 +49,11 @@
         "description": "Optional overrides for CSS/XPath selectors used in the UI navigation.",
         "editor": "json"
       },
-    "useGoogleSSO": {
+        "useGoogleSSO": {
       "title": "Use Google SSO",
       "type": "boolean",
-      "description": "If true, click 'Continue with Google' and log in at accounts.google.com"
+      "useGoogleSSO": true,
+        "description": "If true, click 'Continue with Google' and log in at accounts.google.com"
     },
     "pauseFor2FASeconds": {
       "title": "2FA wait (seconds)",
