@@ -6,6 +6,7 @@
   "dockerfile": "./Dockerfile",
   "readme": "./README.md",
   "input": {
+    "schemaVersion": 1,
     "title": "Config",
     "type": "object",
     "properties": {
